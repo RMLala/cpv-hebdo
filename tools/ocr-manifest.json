@@ -1,0 +1,22 @@
+{
+  "library": {
+    "name": "tesseract.min.js",
+    "url": "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
+    "sha256": "a8e29918d098b2b06e1012bdaeffb4aec0445c5d5654709023e0bd1f442a80e8"
+  },
+  "worker": {
+    "name": "worker.min.js",
+    "url": "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js",
+    "sha256": "aca1229639fc9907d86f96e825955a2b7c5716d17f3bc3acd71f9c7ab66181fc"
+  },
+  "core": {
+    "name": "core.js",
+    "url": "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1/tesseract-core-lstm.wasm.js",
+    "sha256": "8f04aa0cc81e7bde33f80e92fa01a7a665f0b4884d098acf5de9c7104a11dfaa"
+  },
+  "language": {
+    "name": "eng.traineddata.gz",
+    "url": "https://tessdata.projectnaptha.com/4.0.0_fast/eng.traineddata.gz",
+    "sha256": "18c1ac52b75e35d44735fb6c2a60acfaf23033524653200738e98f0243edb75b"
+  }
+}

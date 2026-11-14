@@ -1,0 +1,10 @@
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore
+node_modules/
+vendor/
+qa/
+Standalone.html
+app/src/main/assets/index.html

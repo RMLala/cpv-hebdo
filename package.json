@@ -1,0 +1,1 @@
+{"name":"cpv-hebdo","version":"2.0.0","private":true,"scripts":{"test":"node tests/app.test.cjs && node tests/premium.test.cjs","test:browser":"node tests/browser-smoke.cjs"},"devDependencies":{"playwright":"1.62.1","fake-indexeddb":"6.2.4"}}
