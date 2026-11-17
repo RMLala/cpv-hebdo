@@ -47,11 +47,14 @@ import java.io.OutputStream;
 import java.util.Locale;
 import org.json.JSONObject;
 
-public class MainActivity extends Activity {
+public class MainActivity extends androidx.fragment.app.FragmentActivity {
     private WebView web;
     private final ExecutorService io = Executors.newFixedThreadPool(2);
     private TextRecognizer recognizer;
     private boolean destroyed = false;
+    private PinGate pinGate;
+    private long stoppedAt;
+    private boolean contentLoaded;
     private ValueCallback<Uri[]> chooser;
     private static final int PICK_FILE = 501, STORAGE = 502;
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
@@ -97,8 +100,16 @@ public class MainActivity extends Activity {
             }
         });
         web.addJavascriptInterface(new NativeFiles(), "CpvNative");
-        web.loadUrl("https://" + LOCAL_HOST + "/assets/index.html");
+        try {
+            pinGate = new PinGate(this);
+            showGate();
+        } catch (Exception e) {
+            new AlertDialog.Builder(this).setMessage("Le coffre Android ne peut pas démarrer. Aucune donnée n’a été effacée.")
+                .setPositiveButton("Fermer", (d,w)->finish()).setCancelable(false).show();
+        }
     }
+    private void showGate(){pinGate.show(()->{setContentView(web);if(!contentLoaded){contentLoaded=true;web.loadUrl("https://"+LOCAL_HOST+"/assets/index.html");}});}
+    private boolean authorized(){return pinGate!=null && pinGate.isUnlocked();}
     private boolean navigate(Uri uri) {
         if ("https".equals(uri.getScheme()) && LOCAL_HOST.equals(uri.getHost()) && "/assets/index.html".equals(uri.getPath())) return false;
         if ("https".equals(uri.getScheme()) && "wa.me".equals(uri.getHost())) {
@@ -131,12 +142,37 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> { if (!destroyed) web.evaluateJavascript("window."+function+"("+JSONObject.quote(requestId)+","+JSONObject.quote(result.toString())+")",null); });
     }
     private void errorCallback(String function,String requestId,String message){try{callback(function,requestId,new JSONObject().put("error",message));}catch(Exception ignored){}}
-    @Override protected void onResume(){super.onResume();if(web!=null)web.evaluateJavascript("typeof scheduleSync20==='function'&&scheduleSync20()",null);}
+    @Override protected void onResume(){super.onResume();if(pinGate!=null && stoppedAt>0 && System.currentTimeMillis()-stoppedAt>=60000){pinGate.lock();showGate();}stoppedAt=0;if(web!=null && authorized())web.evaluateJavascript("typeof scheduleSync20==='function'&&scheduleSync20()",null);}
+    @Override protected void onStop(){stoppedAt=System.currentTimeMillis();super.onStop();}
     @Override protected void onDestroy(){destroyed=true;if(recognizer!=null)recognizer.close();io.shutdownNow();if(web!=null){web.removeJavascriptInterface("CpvNative");web.destroy();}super.onDestroy();}
     public class NativeFiles {
+        @JavascriptInterface public String vaultSecret(){try{return pinGate==null?"":pinGate.vaultSecret();}catch(Exception e){return "";}}
+        @JavascriptInterface public String installationId(){
+            if(!authorized())return "";
+            try{String id=android.provider.Settings.Secure.getString(getContentResolver(),android.provider.Settings.Secure.ANDROID_ID);
+                if(id==null||id.isEmpty())throw new Exception();byte[] digest=java.security.MessageDigest.getInstance("SHA-256").digest(("mg.rmlala.cpv:"+id).getBytes(StandardCharsets.UTF_8));
+                StringBuilder hex=new StringBuilder();for(byte b:digest)hex.append(String.format(Locale.ROOT,"%02x",b&255));return hex.toString();
+            }catch(Exception e){return "";}
+        }
+        @JavascriptInterface public void licenseRequest(String requestId,String endpoint,String path,String body){
+            if(!authorized()){errorCallback("cpvLicenseResult3",requestId,"Application verrouillée.");return;}
+            io.execute(()->{HttpURLConnection connection=null;try{
+                URL base=new URL(endpoint);
+                if(!base.getProtocol().equals("https")||!base.getHost().matches("[a-z0-9.-]+\\.workers\\.dev")||base.getPort()!=-1||base.getUserInfo()!=null||base.getQuery()!=null||base.getRef()!=null||!(base.getPath().isEmpty()||base.getPath().equals("/")))throw new Exception("Service refusé.");
+                if(!path.matches("/v1/(config|trial|activate|status)")||body==null||body.length()>16000)throw new Exception("Route refusée.");
+                connection=(HttpURLConnection)new URL(endpoint+path).openConnection();connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(15000);
+                connection.setRequestMethod(path.equals("/v1/config")?"GET":"POST");connection.setRequestProperty("Content-Type","application/json");
+                if(!path.equals("/v1/config")){connection.setDoOutput(true);try(OutputStream out=connection.getOutputStream()){out.write(body.getBytes(StandardCharsets.UTF_8));}}
+                int status=connection.getResponseCode();InputStream stream=status<400?connection.getInputStream():connection.getErrorStream();ByteArrayOutputStream result=new ByteArrayOutputStream();
+                if(stream!=null)try(InputStream in=stream){byte[] buffer=new byte[4096];int n;while((n=in.read(buffer))!=-1){if(result.size()+n>32000)throw new Exception("Réponse trop volumineuse.");result.write(buffer,0,n);}}
+                callback("cpvLicenseResult3",requestId,new JSONObject().put("status",status).put("body",result.toString("UTF-8")));
+            }catch(Exception e){errorCallback("cpvLicenseResult3",requestId,"Service de licences inaccessible.");}finally{if(connection!=null)connection.disconnect();}});
+        }
+        @JavascriptInterface public void openSupport(){if(!authorized())return;runOnUiThread(()->{try{startActivity(new Intent(Intent.ACTION_SENDTO,Uri.parse("mailto:lalainaadclick@gmail.com?subject=Support%20CPV%202.1")));}catch(Exception e){toast("Aucune application e-mail disponible.");}});}
         @JavascriptInterface public String saveFile(String data, String requestedName, String mime, boolean share) {
             Uri pendingUri = null;
             try {
+                if(!authorized())throw new Exception("Déverrouillez l’application.");
                 if (data == null || data.length() > 85000000) throw new Exception("Fichier trop volumineux.");
                 if (!mime.equals("application/json") && !mime.equals("image/png") && !mime.equals("application/zip") && !mime.startsWith("text/csv")) throw new Exception("Type de fichier refusé.");
                 String name = requestedName.replaceAll("[^a-zA-Z0-9._-]", "_");
@@ -207,6 +243,7 @@ public class MainActivity extends Activity {
             }
         }
         @JavascriptInterface public void recognizeText(String data, String requestId) {
+            if(!authorized()){errorCallback("cpvOCRResult20",requestId,"Application verrouillée.");return;}
             io.execute(() -> {
                 try {
                     if (data == null || data.length() > 12000000 || !data.matches("^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$")) throw new Exception("Capture invalide.");
@@ -223,6 +260,7 @@ public class MainActivity extends Activity {
             });
         }
         @JavascriptInterface public void cloudRequest(String requestId, String path, String method, String body, String token) {
+            if(!authorized()){errorCallback("cpvCloudResult20",requestId,"Application verrouillée.");return;}
             io.execute(() -> {
                 HttpURLConnection connection = null;
                 try {
@@ -243,6 +281,7 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public String shareFiles(String manifest) {
             try {
+                if(!authorized())throw new Exception("Déverrouillez l’application.");
                 if(manifest==null || manifest.length()>80000000)throw new Exception("Fichiers trop volumineux.");
                 JSONArray items=new JSONArray(manifest);if(items.length()<1||items.length()>12)throw new Exception("1 à 12 images maximum.");
                 File dir=new File(getCacheDir(),"shared");if(!dir.exists()&&!dir.mkdirs())throw new Exception("Dossier de partage indisponible.");
@@ -253,6 +292,7 @@ public class MainActivity extends Activity {
             }catch(Exception e){try{return new JSONObject().put("ok",false).put("error",e.getMessage()).toString();}catch(Exception ignored){return "{\"ok\":false}";}}
         }
         @JavascriptInterface public void printReport() {
+            if(!authorized())return;
             runOnUiThread(() -> {
                 PrintManager manager = (PrintManager) getSystemService(PRINT_SERVICE);
                 if (manager != null) manager.print("CPV-Rapport", web.createPrintDocumentAdapter("CPV-Rapport"), null);

@@ -1,0 +1,108 @@
+package mg.rmlala.cpv;
+
+import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.text.InputFilter;
+import android.text.InputType;
+import android.util.Base64;
+import android.view.Gravity;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentActivity;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
+
+/** Native authentication gate. PIN never crosses the WebView bridge. */
+final class PinGate {
+    private final FragmentActivity activity;
+    private final SharedPreferences prefs;
+    private final KeyStore keys;
+    private volatile boolean unlocked;
+    private String firstPin;
+    private BiometricPrompt biometric;
+
+    PinGate(FragmentActivity activity) throws Exception {
+        this.activity=activity;
+        prefs=activity.getSharedPreferences("cpv-native-security-v3",0);
+        keys=KeyStore.getInstance("AndroidKeyStore");keys.load(null);
+        if(!keys.containsAlias("cpv-pin-pepper")){
+            KeyGenerator gen=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256,"AndroidKeyStore");
+            gen.init(new KeyGenParameterSpec.Builder("cpv-pin-pepper",KeyProperties.PURPOSE_SIGN|KeyProperties.PURPOSE_VERIFY).build());gen.generateKey();
+        }
+        if(!keys.containsAlias("cpv-vault-wrap")){
+            KeyGenerator gen=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");
+            gen.init(new KeyGenParameterSpec.Builder("cpv-vault-wrap",KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build());gen.generateKey();
+        }
+    }
+    boolean isUnlocked(){return unlocked;}
+    void lock(){unlocked=false;}
+    private String pinDigest(String pin) throws Exception {
+        Mac mac=Mac.getInstance("HmacSHA256");mac.init((SecretKey)keys.getKey("cpv-pin-pepper",null));
+        return Base64.encodeToString(mac.doFinal(("CPV3:"+pin).getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP);
+    }
+    synchronized String vaultSecret() throws Exception {
+        if(!unlocked)throw new SecurityException("Application verrouillée.");
+        Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");SecretKey key=(SecretKey)keys.getKey("cpv-vault-wrap",null);
+        String stored=prefs.getString("vault",null);
+        if(stored!=null){cipher.init(Cipher.DECRYPT_MODE,key,new GCMParameterSpec(128,Base64.decode(prefs.getString("vaultIv",""),Base64.NO_WRAP)));
+            return new String(cipher.doFinal(Base64.decode(stored,Base64.NO_WRAP)),StandardCharsets.UTF_8);}
+        byte[] random=new byte[32];new SecureRandom().nextBytes(random);String secret=Base64.encodeToString(random,Base64.NO_WRAP);
+        cipher.init(Cipher.ENCRYPT_MODE,key);String encrypted=Base64.encodeToString(cipher.doFinal(secret.getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP);
+        if(!prefs.edit().putString("vault",encrypted).putString("vaultIv",Base64.encodeToString(cipher.getIV(),Base64.NO_WRAP)).commit())throw new Exception("Stockage sécurisé indisponible.");return secret;
+    }
+    void show(Runnable ready){
+        unlocked=false;firstPin=null;
+        LinearLayout layout=new LinearLayout(activity);layout.setOrientation(LinearLayout.VERTICAL);layout.setGravity(Gravity.CENTER);
+        layout.setPadding(48,48,48,48);layout.setBackgroundColor(Color.rgb(243,246,250));
+        TextView title=new TextView(activity);title.setText("CPV Rapport Hebdo");title.setTextSize(25);title.setTextColor(Color.rgb(24,56,88));layout.addView(title);
+        TextView note=new TextView(activity);boolean setup=!prefs.contains("pinDigest");note.setText(setup?"Créez votre PIN de secours (4 chiffres).":"Déverrouillez par biométrie ou saisissez votre PIN.");layout.addView(note);
+        EditText pin=new EditText(activity);pin.setHint("PIN à 4 chiffres");pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);pin.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4)});layout.addView(pin,new LinearLayout.LayoutParams(-1,-2));
+        Button submit=new Button(activity);submit.setText(setup?"Continuer":"Déverrouiller");layout.addView(submit);
+        TextView error=new TextView(activity);error.setTextColor(Color.rgb(160,40,40));layout.addView(error);
+        Runnable success=()->{unlocked=true;firstPin=null;prefs.edit().putInt("failures",0).remove("blockedUntil").apply();ready.run();};
+        submit.setOnClickListener(v->{
+            try{
+                long blocked=prefs.getLong("blockedUntil",0)-System.currentTimeMillis();if(blocked>0){error.setText("Réessayez dans "+((blocked+999)/1000)+" secondes.");return;}
+                String value=pin.getText().toString();pin.setText("");if(!value.matches("[0-9]{4}")){error.setText("Saisissez exactement 4 chiffres.");return;}
+                if(!prefs.contains("pinDigest")){
+                    if(firstPin==null){firstPin=value;note.setText("Confirmez le PIN de secours.");return;}
+                    if(!firstPin.equals(value)){firstPin=null;note.setText("Créez votre PIN de secours.");error.setText("Les deux codes sont différents.");return;}
+                    if(!prefs.edit().putString("pinDigest",pinDigest(value)).commit())throw new Exception();success.run();
+                }else if(MessageDigest.isEqual(pinDigest(value).getBytes(StandardCharsets.UTF_8),prefs.getString("pinDigest","").getBytes(StandardCharsets.UTF_8)))success.run();
+                else{int failures=prefs.getInt("failures",0)+1;long delay=failures>=5?Math.min(3600000L,30000L*(1L<<Math.min(7,failures-5))):0;
+                    prefs.edit().putInt("failures",failures).putLong("blockedUntil",System.currentTimeMillis()+delay).apply();error.setText(delay>0?"Trop de tentatives. Réessayez dans "+delay/1000+" secondes.":"PIN incorrect.");}
+            }catch(Exception e){error.setText("Le stockage sécurisé est indisponible. Aucune donnée n’a été effacée.");}
+        });
+        activity.setContentView(layout);
+        if(!setup){
+            try{
+                if(BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)==BiometricManager.BIOMETRIC_SUCCESS){
+                    biometric=new BiometricPrompt(activity,ContextCompat.getMainExecutor(activity),new BiometricPrompt.AuthenticationCallback(){
+                        @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result){super.onAuthenticationSucceeded(result);success.run();}
+                        @Override public void onAuthenticationError(int code,CharSequence text){super.onAuthenticationError(code,text);note.setText("Saisissez votre PIN de secours.");}
+                        @Override public void onAuthenticationFailed(){error.setText("Biométrie non reconnue. Réessayez ou utilisez le PIN.");}
+                    });
+                    Button retry=new Button(activity);retry.setText("Utiliser la biométrie");layout.addView(retry);
+                    Runnable request=()->{try{biometric.authenticate(new BiometricPrompt.PromptInfo.Builder().setTitle("Déverrouiller CPV")
+                        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG).setNegativeButtonText("Utiliser le PIN").build());}catch(Exception e){note.setText("Biométrie indisponible. Utilisez votre PIN.");}};
+                    retry.setOnClickListener(v->request.run());activity.getWindow().getDecorView().post(request);
+                }
+            }catch(Exception e){note.setText("Biométrie indisponible. Utilisez votre PIN.");}
+        }
+    }
+}

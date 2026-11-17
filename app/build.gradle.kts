@@ -8,7 +8,7 @@ android {
         minSdk = 23
         targetSdk = 34
         versionCode = providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull() ?: 1
-        versionName = "2.0"
+        versionName = "2.1"
     }
     flavorDimensions += "compatibility"
     productFlavors {
@@ -37,6 +37,7 @@ android {
     }
 }
 dependencies {
+    implementation("androidx.biometric:biometric:1.1.0")
     implementation(platform("org.jetbrains.kotlin:kotlin-bom:1.8.22"))
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.core:core:1.13.1")
