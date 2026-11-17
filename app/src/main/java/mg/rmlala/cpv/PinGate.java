@@ -12,6 +12,8 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.ScrollView;
+import android.view.inputmethod.EditorInfo;
 import androidx.biometric.BiometricManager;
 import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
@@ -71,8 +73,8 @@ final class PinGate {
         layout.setPadding(48,48,48,48);layout.setBackgroundColor(Color.rgb(243,246,250));
         TextView title=new TextView(activity);title.setText("CPV Rapport Hebdo");title.setTextSize(25);title.setTextColor(Color.rgb(24,56,88));layout.addView(title);
         TextView note=new TextView(activity);boolean setup=!prefs.contains("pinDigest");note.setText(setup?"Créez votre PIN de secours (4 chiffres).":"Déverrouillez par biométrie ou saisissez votre PIN.");layout.addView(note);
-        EditText pin=new EditText(activity);pin.setHint("PIN à 4 chiffres");pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);pin.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4)});layout.addView(pin,new LinearLayout.LayoutParams(-1,-2));
-        Button submit=new Button(activity);submit.setText(setup?"Continuer":"Déverrouiller");layout.addView(submit);
+        EditText pin=new EditText(activity);pin.setHint("PIN à 4 chiffres");pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);pin.setSingleLine(true);pin.setImeOptions(EditorInfo.IME_ACTION_DONE);pin.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4)});layout.addView(pin,new LinearLayout.LayoutParams(-1,-2));
+        Button submit=new Button(activity);submit.setAllCaps(false);submit.setText(setup?"Continuer":"Déverrouiller");layout.addView(submit);
         TextView error=new TextView(activity);error.setTextColor(Color.rgb(160,40,40));layout.addView(error);
         Runnable success=()->{unlocked=true;firstPin=null;prefs.edit().putInt("failures",0).remove("blockedUntil").apply();ready.run();};
         submit.setOnClickListener(v->{
@@ -88,7 +90,8 @@ final class PinGate {
                     prefs.edit().putInt("failures",failures).putLong("blockedUntil",System.currentTimeMillis()+delay).apply();error.setText(delay>0?"Trop de tentatives. Réessayez dans "+delay/1000+" secondes.":"PIN incorrect.");}
             }catch(Exception e){error.setText("Le stockage sécurisé est indisponible. Aucune donnée n’a été effacée.");}
         });
-        activity.setContentView(layout);
+        pin.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){submit.performClick();return true;}return false;});
+        ScrollView scroll=new ScrollView(activity);scroll.setFillViewport(true);scroll.addView(layout,new ScrollView.LayoutParams(-1,-2));activity.setContentView(scroll);
         if(!setup){
             try{
                 if(BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)==BiometricManager.BIOMETRIC_SUCCESS){
