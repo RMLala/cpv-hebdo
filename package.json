@@ -1,0 +1,13 @@
+{
+  "name": "cpv-hebdo",
+  "version": "2.1.0",
+  "private": true,
+  "scripts": {
+    "test": "node tests/app.test.cjs && node tests/premium.test.cjs && node tests/v3.test.cjs",
+    "test:browser": "node tests/browser-smoke.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1",
+    "fake-indexeddb": "6.2.4"
+  }
+}

@@ -1,0 +1,153 @@
+name: CPV Quality and Android API23 API29
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cpv-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: vendor
+          key: cpv-ocr-${{ hashFiles('tools/ocr-manifest.json') }}
+      - run: python3 tools/build.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: CPV-Hebdo-2.1-HTML-and-QA
+          path: |
+            Standalone.html
+            qa/*.png
+          if-no-files-found: error
+  debug:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: vendor
+          key: cpv-ocr-${{ hashFiles('tools/ocr-manifest.json') }}
+      - run: python3 tools/build.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - run: gradle --no-daemon :app:assembleApi23Debug :app:assembleApi29Debug
+      - name: Enable emulator acceleration
+        run: |
+          sudo chmod 666 /dev/kvm
+          # Disposable runner SDKs unused by this Java-only project.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc
+          df -h .
+      - name: Test installed API29 variant on Android 13
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disk-size: 2048M
+          ram-size: 2048M
+          emulator-boot-timeout: 300
+          disable-animations: true
+          script: python3 tests/device-smoke.py
+  signed-release:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    # Signing secrets must never be provided to PR code, including same-repo PRs.
+    # Manual signing is restricted to the reviewed main branch too.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: vendor
+          key: cpv-ocr-${{ hashFiles('tools/ocr-manifest.json') }}
+      - run: python3 tools/build.py
+      - name: Check existing organization signing secret names
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set +x
+          set -euo pipefail
+          missing=""
+          for name in KEYSTORE_BASE64 KEY_ALIAS KEYSTORE_PASSWORD KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Signing secrets inaccessible:$missing. GitHub Free organization secrets require a public repository and an access policy allowing this repository."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/cpv-release.jks"
+          chmod 600 "$RUNNER_TEMP/cpv-release.jks"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build selected signed release API29
+        env:
+          RELEASE_KEYSTORE_FILE: ${{ runner.temp }}/cpv-release.jks
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          RELEASE_VERSION_CODE: ${{ github.run_number }}
+        run: gradle --no-daemon :app:assembleApi29Release -PreleaseVersionCode="$RELEASE_VERSION_CODE"
+      - name: Verify APK signatures, compatibility and version
+        run: |
+          set -euo pipefail
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          for api in 29; do
+            apk="app/build/outputs/apk/api${api}/release/app-api${api}-release.apk"
+            "$tools/apksigner" verify "$apk"
+            "$tools/aapt" dump badging "$apk" | grep "sdkVersion:'$api'"
+            "$tools/aapt" dump badging "$apk" | grep "versionName='2.1'"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CPV-Hebdo-2.1-Release-API29
+          path: app/build/outputs/apk/api29/release/*.apk
+          if-no-files-found: error
+      - name: Remove ephemeral signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cpv-release.jks"

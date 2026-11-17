@@ -1,0 +1,14 @@
+name: AppForge V3 static evidence
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    uses: RMLala/android-template/.github/workflows/appforge-v3-reusable.yml@f5276f1d93169906f180d0f938da256ad0f967fe
+    with:
+      source_dir: .
