@@ -18,6 +18,7 @@ function refreshCloud4(message){
 }
 function clearCloud4(suspended=false){session4=null;cloudToken20='';cloudStopped4=suspended;window.CpvNative?.clearCloudToken4?.();}
 async function verifyCloudToken4(access){
+ if(access?.enabled===false)throw Object.assign(Error('Cette licence ne donne pas droit au Cloud.'),{status:403,cloudEntitlementDenied:true});
  if(!access||typeof access.token!=='string'||access.token.length>8192)throw Error('Aucun jeton Cloud valide reçu.');
  const parts=access.token.split('.');if(parts.length!==2)throw Error('Jeton Cloud invalide.');
  const key=await crypto.subtle.importKey('jwk',license3.key,{name:'ECDSA',namedCurve:'P-256'},false,['verify']);
@@ -35,13 +36,13 @@ async function connectCloud4(force=false,access=null){
  if(navigator.onLine===false)throw Error('Hors ligne. Reprise automatique au retour du réseau.');
  if(!force&&session4?.expires>Date.now()+60000&&!cloudStopped4)return session4;
  if(connectPromise4)return connectPromise4;
- connectPromise4=(async()=>{try{
+ connectPromise4=(async()=>{let statusVerified=!!access;try{
   if(!license3?.token)throw Error('Activez une licence éligible au Cloud.');
   if(!license3.key){const config=await licenseAPI3('/v1/config');license3.key=config.publicKey;}
   await claims3(license3.token,license3.key,PRODUCT4,installation3());
-  if(!access){const result=await licenseAPI3('/v1/status',{productId:PRODUCT4,installationId:installation3(),token:license3.token});if(result.active!==true)throw Object.assign(Error('Licence inactive.'),{status:403});license3.checkedAt=Date.now();license3.revoked=false;await storeLicense3();access=await licenseAPI3('/v1/cloud/token',{productId:PRODUCT4,installationId:installation3(),licenseToken:license3.token});}
+  if(!access){const result=await licenseAPI3('/v1/status',{productId:PRODUCT4,installationId:installation3(),token:license3.token});if(result.active!==true)throw Object.assign(Error('Licence inactive.'),{status:403});statusVerified=true;license3.checkedAt=Date.now();license3.revoked=false;await storeLicense3();access=await licenseAPI3('/v1/cloud/token',{productId:PRODUCT4,installationId:installation3(),licenseToken:license3.token});}
   await verifyCloudToken4(access);lastCloudError4='';retry4=2000;refreshCloud4();return session4;
- }catch(e){clearCloud4(e.status===403);if(e.status===403){license3.revoked=true;await storeLicense3();}refreshCloud4(e.status===404?'Le service Cloud lié aux licences n’est pas encore disponible.':e.message);throw e;}finally{connectPromise4=null}})();
+ }catch(e){clearCloud4(e.status===403);if(e.status===403&&!statusVerified){license3.revoked=true;await storeLicense3();}refreshCloud4(e.status===404?'Le service Cloud lié aux licences n’est pas encore disponible.':e.message);throw e;}finally{connectPromise4=null}})();
  return connectPromise4;
 }
 window.cpvLicenseCloudResult4=(id,raw)=>{const pending=nativePending4.get(id);if(!pending)return;nativePending4.delete(id);clearTimeout(pending.timer);try{const r=JSON.parse(raw);if(r.error)throw Error(r.error);const body=JSON.parse(r.body||'{}');if(r.status>=400)throw Object.assign(Error('Cloud : '+r.status),{status:r.status});pending.resolve(body)}catch(e){pending.reject(e)}};
@@ -57,7 +58,7 @@ async function cloudRequest4(resource,method='GET',body){
  try{return await cloudTransport4(resource,method,body)}catch(e){
   if(e.status===401){clearCloud4();await connectCloud4(true);return cloudTransport4(resource,method,body);}
   if(e.status===403){clearCloud4(true);try{await licenseAPI3('/v1/status',{productId:PRODUCT4,installationId:installation3(),token:license3.token});}catch(statusError){if(statusError.status===403){license3.revoked=true;await storeLicense3();await refreshLicense3();}}throw Error('Licence, droits Cloud ou appareil refusés. Contactez le support.');}
-  if(e.status===413)throw Error('Quota par requête dépassé. Archivez les anciennes captures.');
+  if(e.status===413)throw Error('Limite de stockage ou de taille Cloud atteinte. Contactez le support. Données locales conservées.');
   if(e.status===429)throw Error('Quota du service atteint. Réessayez plus tard.');throw e;
  }
 };

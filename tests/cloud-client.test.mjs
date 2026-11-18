@@ -36,3 +36,5 @@ test('Client + official Worker + SQLite: automatic access, two devices, offline 
  await restarted.run(`(async()=>{state.draft.page='Offline data retained after revocation';localGeneration20++;syncMeta4().pending=true;await syncCloud20();assert.equal(cloudConnected4(),false);assert.equal(cloudStopped4,true);assert.equal(state.draft.page,'Offline data retained after revocation');assert.equal(syncMeta4().pending,true);})()`);
  }finally{if(a)await a.close();if(b)await b.close();if(restarted)await restarted.close();s.close();}
 });
+
+test('A valid license without Cloud entitlement stays valid and local data remains accessible',async()=>{const service=await issuer(),license=await paidFixture(service),id='synthetic-no-cloud-device';let d;try{const activation=await activate(service,license,id);d=await device(service,id,activation);await d.run(`(async()=>{const before=JSON.stringify(state.draft);await startCloud4({enabled:false});assert.equal(cloudConnected4(),false);assert.equal(cloudStopped4,true);assert.ok(!license3.revoked);assert.equal(JSON.stringify(state.draft),before)})()`)}finally{if(d)await d.close();service.close();}});
