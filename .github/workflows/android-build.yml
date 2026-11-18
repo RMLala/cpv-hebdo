@@ -35,7 +35,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: CPV-Hebdo-2.1-HTML-and-QA
+          name: CPV-Hebdo-2.2-HTML-and-QA
           path: |
             Standalone.html
             qa/*.png
@@ -46,6 +46,9 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - uses: actions/cache@v4
         with:
           path: vendor
@@ -141,11 +144,11 @@ jobs:
             apk="app/build/outputs/apk/api${api}/release/app-api${api}-release.apk"
             "$tools/apksigner" verify "$apk"
             "$tools/aapt" dump badging "$apk" | grep "sdkVersion:'$api'"
-            "$tools/aapt" dump badging "$apk" | grep "versionName='2.1'"
+            "$tools/aapt" dump badging "$apk" | grep "versionName='2.2'"
           done
       - uses: actions/upload-artifact@v4
         with:
-          name: CPV-Hebdo-2.1-Release-API29
+          name: CPV-Hebdo-2.2-Release-API29
           path: app/build/outputs/apk/api29/release/*.apk
           if-no-files-found: error
       - name: Remove ephemeral signing key
