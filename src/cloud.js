@@ -1,4 +1,4 @@
-// AppForge license-bound Cloud contract: RMLala/appforg PR #8, commit 8f2786f.
+// AppForge license-bound Cloud contract: RMLala/appforg PR #8 + #11, commit 9064b1b.
 // No account, organization, server secret, token in URL, backup or report.
 const ISSUER4='https://appforge-license-api.appforge-licences-mg.workers.dev',PRODUCT4='CPV-HEBDO';
 let session4=null,connectPromise4=null,syncPromise4=null,retry4=2000,poll4=null,lastCloudError4='',cloudScope4='',cloudStopped4=false,licenseBusy4=false,cloudRequests4=0;
