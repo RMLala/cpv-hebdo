@@ -47,7 +47,7 @@ const bootBefore3=boot;
 boot=async function(){try{await vaultInit3();await bootBefore3();if(!db||storageProtected){storageProtected=true;throw Error('Coffre illisible ou stockage indisponible. Les données existantes sont conservées.')}setupSupport3();await setupLicense3();bootComplete3=true;persist()}catch(e){document.querySelector('main').inert=true;let panel=$('vaultError3');if(!panel){panel=document.createElement('div');panel.id='vaultError3';panel.className='panel';document.body.prepend(panel)}panel.replaceChildren();const message=document.createElement('p');message.textContent=e.message;const retry=document.createElement('button');retry.textContent='Réessayer';retry.onclick=()=>location.reload();panel.append(message,retry)}};
 
 const formatControlsBefore3=formatControls20;
-formatControls20=function(){formatControlsBefore3();if(bootComplete3)setupFormatFolds3()};
+formatControls20=function(){const host=$('formatControls20');if(host)delete host.dataset.folded;formatControlsBefore3();if(bootComplete3)setupFormatFolds3()};
 function setupFormatFolds3(){
  const host=$('formatControls20');if(!host||host.dataset.folded)return;host.dataset.folded='true';
  const fold=(key,title,nodes,parent)=>{const d=document.createElement('details');d.dataset.foldKey=key;const summary=document.createElement('summary');summary.textContent=title;d.append(summary,...nodes);d.open=localStorage.getItem('cpv-format-fold-'+key)==='open';d.addEventListener('toggle',()=>localStorage.setItem('cpv-format-fold-'+key,d.open?'open':'closed'));parent.append(d);return d};
