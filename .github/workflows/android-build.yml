@@ -35,7 +35,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: CPV-Hebdo-2.2-HTML-and-QA
+          name: CPV-Hebdo-2.3-HTML-and-QA
           path: |
             Standalone.html
             qa/*.png
@@ -144,13 +144,29 @@ jobs:
             apk="app/build/outputs/apk/api${api}/release/app-api${api}-release.apk"
             "$tools/apksigner" verify "$apk"
             "$tools/aapt" dump badging "$apk" | grep "sdkVersion:'$api'"
-            "$tools/aapt" dump badging "$apk" | grep "versionName='2.2'"
+            "$tools/aapt" dump badging "$apk" | grep "versionName='2.3'"
           done
       - uses: actions/upload-artifact@v4
         with:
-          name: CPV-Hebdo-2.2-Release-API29
+          name: CPV-Hebdo-2.3-Release-API29
           path: app/build/outputs/apk/api29/release/*.apk
           if-no-files-found: error
       - name: Remove ephemeral signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/cpv-release.jks"
+
+  backend-observation:
+    name: Deployed backend observation (not business validation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: mkdir -p qa
+      - run: node tools/probe-cloud.mjs > qa/cloud-deployed-observation.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CPV-Cloud-Backend-Observation
+          path: qa/cloud-deployed-observation.json

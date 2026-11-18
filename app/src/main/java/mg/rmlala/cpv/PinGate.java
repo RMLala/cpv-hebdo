@@ -96,6 +96,18 @@ final class PinGate {
         cipher.init(Cipher.ENCRYPT_MODE,key);String encrypted=Base64.encodeToString(cipher.doFinal(secret.getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP);
         if(!prefs.edit().putString("vault",encrypted).putString("vaultIv",Base64.encodeToString(cipher.getIV(),Base64.NO_WRAP)).commit())throw new Exception("Stockage sécurisé indisponible.");return secret;
     }
+    synchronized void storeCloudToken(String token,long expires) throws Exception {
+        if(!unlocked||token==null||token.length()>8192||expires<=System.currentTimeMillis()||expires>System.currentTimeMillis()+7*3600000L)throw new SecurityException();
+        Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,(SecretKey)keys.getKey("cpv-vault-wrap",null));cipher.updateAAD("cpv-cloud-session".getBytes(StandardCharsets.UTF_8));
+        String encrypted=Base64.encodeToString(cipher.doFinal(token.getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP);
+        if(!prefs.edit().putString("cloudToken",encrypted).putString("cloudIv",Base64.encodeToString(cipher.getIV(),Base64.NO_WRAP)).putLong("cloudExpires",expires).commit())throw new Exception();
+    }
+    synchronized String cloudToken() throws Exception {
+        if(!unlocked||prefs.getLong("cloudExpires",0)<=System.currentTimeMillis())throw new SecurityException("Jeton expiré.");
+        Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.DECRYPT_MODE,(SecretKey)keys.getKey("cpv-vault-wrap",null),new GCMParameterSpec(128,Base64.decode(prefs.getString("cloudIv",""),Base64.NO_WRAP)));cipher.updateAAD("cpv-cloud-session".getBytes(StandardCharsets.UTF_8));
+        return new String(cipher.doFinal(Base64.decode(prefs.getString("cloudToken",""),Base64.NO_WRAP)),StandardCharsets.UTF_8);
+    }
+    synchronized void clearCloudToken(){prefs.edit().remove("cloudToken").remove("cloudIv").remove("cloudExpires").apply();}
     void show(Runnable ready){
         if(!enabled()){unlocked=true;ready.run();return;}
         showPin(ready,false,biometricEnabled(),null);
