@@ -8,7 +8,7 @@ android {
         minSdk = 23
         targetSdk = 34
         versionCode = providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull() ?: 1
-        versionName = "2.2"
+        versionName = "2.3"
     }
     flavorDimensions += "compatibility"
     productFlavors {

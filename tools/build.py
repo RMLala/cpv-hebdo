@@ -14,7 +14,7 @@ for key,item in manifest.items():
     bundle[key]=base64.b64encode(raw).decode('ascii')
 source=(ROOT/'src/template.html').read_text()
 logo='data:image/png;base64,'+base64.b64encode((ROOT/'src/logo.png').read_bytes()).decode('ascii')
-source=source.replace('__CPV_V3_CODE__',(ROOT/'src/v3.js').read_text()+'\n'+(ROOT/'src/license.js').read_text())
+source=source.replace('__CPV_V3_CODE__',(ROOT/'src/v3.js').read_text()+'\n'+(ROOT/'src/license.js').read_text()+'\n'+(ROOT/'src/cloud.js').read_text())
 source=source.replace('__CPV_LOGO_DATA_URI__',logo).replace('__CPV_OCR_BUNDLE__',json.dumps(bundle,separators=(',',':')))
 assert '__CPV_' not in source
 for p in [ROOT/'Standalone.html',ROOT/'app/src/main/assets/index.html']:

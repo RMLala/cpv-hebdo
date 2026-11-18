@@ -167,9 +167,10 @@ public class MainActivity extends androidx.fragment.app.FragmentActivity {
         @JavascriptInterface public void licenseRequest(String requestId,String endpoint,String path,String body){
             if(!authorized()){errorCallback("cpvLicenseResult3",requestId,"Application verrouillée.");return;}
             io.execute(()->{HttpURLConnection connection=null;try{
+                if(!endpoint.equals("https://appforge-license-api.appforge-licences-mg.workers.dev"))throw new Exception("Service refusé.");
                 URL base=new URL(endpoint);
                 if(!base.getProtocol().equals("https")||!base.getHost().matches("[a-z0-9.-]+\\.workers\\.dev")||base.getPort()!=-1||base.getUserInfo()!=null||base.getQuery()!=null||base.getRef()!=null||!(base.getPath().isEmpty()||base.getPath().equals("/")))throw new Exception("Service refusé.");
-                if(!path.matches("/v1/(config|trial|activate|status)")||body==null||body.length()>16000)throw new Exception("Route refusée.");
+                if(!path.matches("/v1/(config|trial|activate|status|cloud/token)")||body==null||body.length()>16000)throw new Exception("Route refusée.");
                 connection=(HttpURLConnection)new URL(endpoint+path).openConnection();connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(15000);
                 connection.setRequestMethod(path.equals("/v1/config")?"GET":"POST");connection.setRequestProperty("Content-Type","application/json");
                 if(!path.equals("/v1/config")){connection.setDoOutput(true);try(OutputStream out=connection.getOutputStream()){out.write(body.getBytes(StandardCharsets.UTF_8));}}
@@ -269,25 +270,20 @@ public class MainActivity extends androidx.fragment.app.FragmentActivity {
                 } catch (Exception e) { errorCallback("cpvOCRResult20", requestId, e.getMessage()); }
             });
         }
-        @JavascriptInterface public void cloudRequest(String requestId, String path, String method, String body, String token) {
-            if(!authorized()){errorCallback("cpvCloudResult20",requestId,"Application verrouillée.");return;}
-            io.execute(() -> {
-                HttpURLConnection connection = null;
-                try {
-                    boolean allowed = path != null && (path.equals("/v1/auth/login") || path.equals("/v1/session") || path.matches("^/v1/organizations/[A-Za-z0-9_%.-]+/apps/[A-Za-z0-9_%.-]+/snapshot$"));
-                    if (!allowed || !(method.equals("GET") || method.equals("PUT") || method.equals("POST")) || (body != null && body.length()>500000) || (token != null && token.length()>8000)) throw new Exception("Requête AppForge refusée.");
-                    connection = (HttpURLConnection)new URL("https://appforge-cloud-api.appforge-licences-mg.workers.dev"+path).openConnection();
-                    connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(20000); connection.setReadTimeout(30000);
-                    connection.setRequestMethod(method); connection.setRequestProperty("Content-Type","application/json");
-                    if (token != null && !token.isEmpty()) connection.setRequestProperty("Authorization","Bearer "+token);
-                    if (body != null && !body.isEmpty() && !method.equals("GET")) { connection.setDoOutput(true); try(OutputStream out=connection.getOutputStream()){ out.write(body.getBytes(StandardCharsets.UTF_8)); } }
-                    int status=connection.getResponseCode(); InputStream input=status<400?connection.getInputStream():connection.getErrorStream();
-                    ByteArrayOutputStream result=new ByteArrayOutputStream();
-                    if(input!=null)try(InputStream in=input){byte[] buffer=new byte[8192];int count;while((count=in.read(buffer))!=-1){if(result.size()+count>700000)throw new Exception("Réponse Cloud trop volumineuse.");result.write(buffer,0,count);}}
-                    callback("cpvCloudResult20",requestId,new JSONObject().put("status",status).put("body",result.toString("UTF-8")));
-                } catch(Exception e){ errorCallback("cpvCloudResult20",requestId,"Connexion AppForge impossible : "+e.getMessage()); }
-                finally { if(connection!=null)connection.disconnect(); }
-            });
+        @JavascriptInterface public boolean storeCloudToken4(String token,long expires){try{pinGate.storeCloudToken(token,expires);return true;}catch(Exception e){return false;}}
+        @JavascriptInterface public void clearCloudToken4(){if(authorized())pinGate.clearCloudToken();}
+        @JavascriptInterface public void licenseCloudRequest4(String requestId,String resource,String method,String body){
+            if(!authorized()){errorCallback("cpvLicenseCloudResult4",requestId,"Application verrouillée.");return;}
+            io.execute(()->{HttpURLConnection connection=null;try{
+                if(resource==null||!resource.matches("[A-Za-z0-9_-]{1,80}")||!(method.equals("GET")||method.equals("PUT"))||body==null||body.getBytes(StandardCharsets.UTF_8).length>450000)throw new Exception();
+                String token=pinGate.cloudToken();
+                connection=(HttpURLConnection)new URL("https://appforge-license-api.appforge-licences-mg.workers.dev/v1/cloud/snapshot?resource="+resource).openConnection();
+                connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(25000);connection.setRequestMethod(method);connection.setRequestProperty("Content-Type","application/json");connection.setRequestProperty("Authorization","Bearer "+token);
+                if(method.equals("PUT")){connection.setDoOutput(true);try(OutputStream out=connection.getOutputStream()){out.write(body.getBytes(StandardCharsets.UTF_8));}}
+                int status=connection.getResponseCode();InputStream stream=status<400?connection.getInputStream():connection.getErrorStream();ByteArrayOutputStream result=new ByteArrayOutputStream();
+                if(stream!=null)try(InputStream in=stream){byte[] bytes=new byte[8192];int n;while((n=in.read(bytes))!=-1){if(result.size()+n>700000)throw new Exception();result.write(bytes,0,n);}}
+                callback("cpvLicenseCloudResult4",requestId,new JSONObject().put("status",status).put("body",result.toString("UTF-8")));
+            }catch(Exception e){errorCallback("cpvLicenseCloudResult4",requestId,"Service Cloud inaccessible. Les données locales sont conservées.");}finally{if(connection!=null)connection.disconnect();}});
         }
         @JavascriptInterface public String shareFiles(String manifest) {
             try {

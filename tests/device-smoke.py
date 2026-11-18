@@ -43,6 +43,12 @@ def restart():
 apk=next(Path('app/build/outputs/apk/api29/debug').glob('*.apk'))
 adb('install','-r',str(apk));adb('shell','pm','clear',PKG);adb('logcat','-c');restart();wait_web()
 assert cdp("JSON.parse(CpvNative.securityStatus()).enabled")==False
+assert cdp("document.querySelector('#cloudEmail20,#cloudPassword20,#cloudOrg20')===null")==True
+assert cdp("CpvNative.storeCloudToken4('runtime-synthetic-not-server-grant',Date.now()+60000)")==True
+secure=adb('shell','run-as',PKG,'cat','shared_prefs/cpv-native-security-v3.xml')
+assert 'runtime-synthetic-not-server-grant' not in secure
+assert 'cloudToken' in secure
+assert cdp("CpvNative.clearCloudToken4();true")==True
 cdp("state.draft.page='PIN preservation fixture';dbWrite(structuredClone(state)).then(()=>true)")
 cdp("CpvNative.securityAction('enable');true");enter_pin('7391','Continuer');enter_pin('7391','Continuer');wait_web()
 assert cdp("JSON.parse(CpvNative.securityStatus()).enabled")==True
