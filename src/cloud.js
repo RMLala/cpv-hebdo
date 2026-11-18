@@ -1,7 +1,7 @@
 // AppForge license-bound Cloud contract: RMLala/appforg PR #8, commit 8f2786f.
 // No account, organization, server secret, token in URL, backup or report.
 const ISSUER4='https://appforge-license-api.appforge-licences-mg.workers.dev',PRODUCT4='CPV-HEBDO';
-let session4=null,connectPromise4=null,syncPromise4=null,retry4=2000,poll4=null,lastCloudError4='',cloudScope4='',cloudStopped4=false;
+let session4=null,connectPromise4=null,syncPromise4=null,retry4=2000,poll4=null,lastCloudError4='',cloudScope4='',cloudStopped4=false,licenseBusy4=false,cloudRequests4=0;
 const nativePending4=new Map();
 function syncMeta4(){return state.cloudSync4||(state.cloudSync4={pending:true,lastSuccess:'',scope:''})}
 const validateBefore4=validateState;
@@ -52,7 +52,7 @@ async function cloudTransport4(resource,method='GET',body){
  if(!response.ok)throw Object.assign(Error('Cloud : '+response.status),{status:response.status});return result;
 }
 cloudRoute20=function(resource=APP_ID20){return resource};
-cloudAPI20=async function(resource,method='GET',body){
+async function cloudRequest4(resource,method='GET',body){
  await connectCloud4();if(!await offlineLicense3()){clearCloud4(true);await refreshLicense3();throw Error('Licence expirée : données locales conservées.');}
  try{return await cloudTransport4(resource,method,body)}catch(e){
   if(e.status===401){clearCloud4();await connectCloud4(true);return cloudTransport4(resource,method,body);}
@@ -63,6 +63,7 @@ cloudAPI20=async function(resource,method='GET',body){
 };
 cloudStatus20=function(text){refreshCloud4(text)};
 cloudPayload20=async function(){const{packed,assets}=await packState20(validateState(state));delete packed.cloudLink;delete packed.cloudSync4;return{packed,assets,hash:await hash20(JSON.stringify(packed))}};
+cloudAPI20=async function(...args){cloudRequests4++;try{return await cloudRequest4(...args)}finally{cloudRequests4--}};
 function conflict4(message){cloudConflict20=true;refreshCloud4(message||'Conflit entre appareils : choisissez explicitement la copie à conserver. Aucune donnée n’a été effacée.');}
 async function saveSyncMeta4(hash,revision){state.cloudLink={org:cloudScope4,revision,hash};const m=syncMeta4();m.lastSuccess=new Date().toISOString();m.scope=cloudScope4;saveSerial=saveSerial.catch(()=>{}).then(()=>dbWrite(structuredClone(state)));await saveSerial;}
 readCloud20=async function(){await connectCloud4();const root=await cloudAPI20(cloudRoute20());cloudRoot20=root.snapshot||null;cloudRev20=Number(root.revision||0);cloudLoaded20=true;return root};
@@ -103,7 +104,7 @@ async function syncOnce4(){
  await pushCloud20(false);
 }
 syncCloud20=async function(){
- if(syncPromise4)return syncPromise4;if(!license3?.token||cloudStopped4)return refreshCloud4();
+ if(licenseBusy4)return;if(syncPromise4)return syncPromise4;if(!license3?.token||cloudStopped4)return refreshCloud4();
  syncPromise4=(async()=>{try{await syncOnce4();retry4=2000;}catch(e){refreshCloud4(e.message);if(!cloudStopped4&&license3?.token){clearTimeout(syncTimer20);syncTimer20=setTimeout(syncCloud20,retry4);retry4=Math.min(60000,retry4*2);}}finally{syncPromise4=null}})();return syncPromise4;
 };
 scheduleSync20=function(){if(!state)return;syncMeta4().pending=true;if(!bootComplete3||!license3?.token)return;clearTimeout(syncTimer20);syncTimer20=setTimeout(syncCloud20,1500)};
