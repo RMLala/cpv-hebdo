@@ -55,6 +55,7 @@ public class MainActivity extends androidx.fragment.app.FragmentActivity {
     private PinGate pinGate;
     private long stoppedAt;
     private boolean contentLoaded;
+    private boolean securityEditing;
     private ValueCallback<Uri[]> chooser;
     private static final int PICK_FILE = 501, STORAGE = 502;
     private static final String LOCAL_HOST = "appassets.androidplatform.net";
@@ -142,10 +143,19 @@ public class MainActivity extends androidx.fragment.app.FragmentActivity {
         runOnUiThread(() -> { if (!destroyed) web.evaluateJavascript("window."+function+"("+JSONObject.quote(requestId)+","+JSONObject.quote(result.toString())+")",null); });
     }
     private void errorCallback(String function,String requestId,String message){try{callback(function,requestId,new JSONObject().put("error",message));}catch(Exception ignored){}}
-    @Override protected void onResume(){super.onResume();if(pinGate!=null && stoppedAt>0 && System.currentTimeMillis()-stoppedAt>=60000){pinGate.lock();showGate();}stoppedAt=0;if(web!=null && authorized())web.evaluateJavascript("typeof scheduleSync20==='function'&&scheduleSync20()",null);}
+    @Override protected void onResume(){super.onResume();if(!securityEditing && pinGate!=null && pinGate.enabled() && stoppedAt>0 && System.currentTimeMillis()-stoppedAt>=60000){pinGate.lock();showGate();}stoppedAt=0;if(web!=null && authorized())web.evaluateJavascript("typeof scheduleSync20==='function'&&scheduleSync20()",null);}
     @Override protected void onStop(){stoppedAt=System.currentTimeMillis();super.onStop();}
     @Override protected void onDestroy(){destroyed=true;if(recognizer!=null)recognizer.close();io.shutdownNow();if(web!=null){web.removeJavascriptInterface("CpvNative");web.destroy();}super.onDestroy();}
     public class NativeFiles {
+        @JavascriptInterface public String securityStatus(){
+            try{return new JSONObject().put("enabled",pinGate.enabled()).put("biometric",pinGate.biometricEnabled()).put("available",pinGate.biometricAvailable()).toString();}catch(Exception e){return "{}";}
+        }
+        @JavascriptInterface public void securityAction(String action){
+            if(!authorized())return;
+            runOnUiThread(()->{securityEditing=true;pinGate.configure(action,()->{securityEditing=false;stoppedAt=0;setContentView(web);web.evaluateJavascript("refreshSecurity3()",null);});});
+        }
+        @JavascriptInterface public void lockNow(){if(!authorized()||!pinGate.enabled())return;runOnUiThread(()->{pinGate.lock();showGate();});}
+
         @JavascriptInterface public String vaultSecret(){try{return pinGate==null?"":pinGate.vaultSecret();}catch(Exception e){return "";}}
         @JavascriptInterface public String installationId(){
             if(!authorized())return "";

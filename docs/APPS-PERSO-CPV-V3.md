@@ -1,3 +1,22 @@
+# État actuel — 18 novembre 2026 — CPV 2.2
+
+Dépôt public confirmé, PR #2 fusionnée. La Release 2.1 API29 était signée et vérifiée (versionCode 10). La CI du push avait échoué sur un dump d’accessibilité de la WebView (uiautomator 137), malgré un passage réussi avant fusion. Le test appareil interroge désormais la WebView Debug via son socket DevTools local ; les écrans natifs PIN restent vérifiés par l’outil d’accessibilité.
+
+Corrections 2.2 :
+- Verrouillage désactivé par défaut ; activation/désactivation du PIN de 4 chiffres dans Réglages.
+- Biométrie facultative prioritaire si activée, avec PIN de secours et vérification Android avant activation. Matériel non compatible signalé honnêtement.
+- Modification du PIN après authentification native. Clé de stockage Android conservée lors de ces changements.
+- En HTML, PIN facultatif, sans prétendre à une sécurité native. Retirer ou changer le PIN conserve la clé de données et les rapports.
+- À chaque sauvegarde, choix explicite sans chiffrement ou avec mot de passe distinct ; préférence mémorisée, sans chiffrement par défaut.
+- Groupes de mise en forme repliables, boutons Tout déplier/Tout replier, état mémorisé.
+
+Livrables autorisés : HTML autonome personnel (captures exclues du dépôt public) et APK Release signé API29. Aucune PWA.
+
+Les essais biométriques sur téléphone physique, les parcours Drive, la licence réelle, le Cloud entre deux appareils et la traduction complète FR/MG restent à valider. La conformité V3 complète n’est pas déclarée.
+
+---
+## Historique de l’audit précédent (17 novembre)
+
 # APPS PERSO — CPV Hebdo — audit de reprise V3
 
 Date : 17 novembre 2026 (Madagascar).

@@ -1,6 +1,7 @@
 package mg.rmlala.cpv;
 
 import android.content.SharedPreferences;
+import android.app.AlertDialog;
 import android.graphics.Color;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
@@ -52,6 +53,34 @@ final class PinGate {
         }
     }
     boolean isUnlocked(){return unlocked;}
+    boolean enabled(){return prefs.getBoolean("lockEnabled",false);}
+    boolean biometricEnabled(){return enabled() && prefs.getBoolean("biometricEnabled",false);}
+    boolean biometricAvailable(){return BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)==BiometricManager.BIOMETRIC_SUCCESS;}
+    void configure(String action,Runnable done){
+        if(!unlocked)return;
+        Runnable restore=()->{unlocked=true;done.run();};
+        if(action.equals("enable")){
+            showPin(()->{prefs.edit().putBoolean("lockEnabled",true).apply();restore.run();},!prefs.contains("pinDigest"),false,restore);
+        }else if(action.equals("disable")){
+            new AlertDialog.Builder(activity).setTitle("Désactiver le verrouillage ?").setMessage("CPV s’ouvrira sans PIN ni biométrie. Vos rapports et sauvegardes seront conservés.")
+                .setNegativeButton("Annuler",(d,w)->restore.run()).setOnCancelListener(d->restore.run())
+                .setPositiveButton("Désactiver",(d,w)->showPin(()->{prefs.edit().putBoolean("lockEnabled",false).putBoolean("biometricEnabled",false).apply();restore.run();},false,biometricEnabled(),restore)).show();
+        }else if(action.equals("change")){
+            if(!enabled()){restore.run();return;}
+            showPin(()->showPin(restore,true,false,restore),false,biometricEnabled(),restore);
+        }else if(action.equals("biometric-on")){
+            if(!enabled()||!biometricAvailable()){new AlertDialog.Builder(activity).setMessage("Activez le PIN et enregistrez une biométrie compatible dans les paramètres Android.").setPositiveButton("OK",(d,w)->restore.run()).show();return;}
+            authenticateBiometric(()->{prefs.edit().putBoolean("biometricEnabled",true).apply();restore.run();},restore);
+        }else if(action.equals("biometric-off")){prefs.edit().putBoolean("biometricEnabled",false).apply();restore.run();}
+        else restore.run();
+    }
+    private void authenticateBiometric(Runnable success,Runnable cancel){
+        biometric=new BiometricPrompt(activity,ContextCompat.getMainExecutor(activity),new BiometricPrompt.AuthenticationCallback(){
+            @Override public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result){success.run();}
+            @Override public void onAuthenticationError(int code,CharSequence message){cancel.run();}
+        });
+        biometric.authenticate(new BiometricPrompt.PromptInfo.Builder().setTitle("Activer la biométrie CPV").setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG).setNegativeButtonText("Annuler").build());
+    }
     void lock(){unlocked=false;}
     private String pinDigest(String pin) throws Exception {
         Mac mac=Mac.getInstance("HmacSHA256");mac.init((SecretKey)keys.getKey("cpv-pin-pepper",null));
@@ -68,11 +97,15 @@ final class PinGate {
         if(!prefs.edit().putString("vault",encrypted).putString("vaultIv",Base64.encodeToString(cipher.getIV(),Base64.NO_WRAP)).commit())throw new Exception("Stockage sécurisé indisponible.");return secret;
     }
     void show(Runnable ready){
+        if(!enabled()){unlocked=true;ready.run();return;}
+        showPin(ready,false,biometricEnabled(),null);
+    }
+    private void showPin(Runnable ready,boolean reset,boolean useBiometric,Runnable cancel){
         unlocked=false;firstPin=null;
         LinearLayout layout=new LinearLayout(activity);layout.setOrientation(LinearLayout.VERTICAL);layout.setGravity(Gravity.CENTER);
         layout.setPadding(48,48,48,48);layout.setBackgroundColor(Color.rgb(243,246,250));
         TextView title=new TextView(activity);title.setText("CPV Rapport Hebdo");title.setTextSize(25);title.setTextColor(Color.rgb(24,56,88));layout.addView(title);
-        TextView note=new TextView(activity);boolean setup=!prefs.contains("pinDigest");note.setText(setup?"Créez votre PIN de secours (4 chiffres).":"Déverrouillez par biométrie ou saisissez votre PIN.");layout.addView(note);
+        TextView note=new TextView(activity);boolean setup=reset||!prefs.contains("pinDigest");note.setText(setup?"Créez votre PIN de secours (4 chiffres).":useBiometric?"Déverrouillez par biométrie ou saisissez votre PIN.":"Saisissez votre PIN à 4 chiffres.");layout.addView(note);
         EditText pin=new EditText(activity);pin.setHint("PIN à 4 chiffres");pin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);pin.setSingleLine(true);pin.setImeOptions(EditorInfo.IME_ACTION_DONE);pin.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4)});layout.addView(pin,new LinearLayout.LayoutParams(-1,-2));
         Button submit=new Button(activity);submit.setAllCaps(false);submit.setText(setup?"Continuer":"Déverrouiller");layout.addView(submit);
         TextView error=new TextView(activity);error.setTextColor(Color.rgb(160,40,40));layout.addView(error);
@@ -81,7 +114,7 @@ final class PinGate {
             try{
                 long blocked=prefs.getLong("blockedUntil",0)-System.currentTimeMillis();if(blocked>0){error.setText("Réessayez dans "+((blocked+999)/1000)+" secondes.");return;}
                 String value=pin.getText().toString();pin.setText("");if(!value.matches("[0-9]{4}")){error.setText("Saisissez exactement 4 chiffres.");return;}
-                if(!prefs.contains("pinDigest")){
+                if(setup){
                     if(firstPin==null){firstPin=value;note.setText("Confirmez le PIN de secours.");return;}
                     if(!firstPin.equals(value)){firstPin=null;note.setText("Créez votre PIN de secours.");error.setText("Les deux codes sont différents.");return;}
                     if(!prefs.edit().putString("pinDigest",pinDigest(value)).commit())throw new Exception();success.run();
@@ -92,7 +125,8 @@ final class PinGate {
         });
         pin.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE){submit.performClick();return true;}return false;});
         ScrollView scroll=new ScrollView(activity);scroll.setFillViewport(true);scroll.addView(layout,new ScrollView.LayoutParams(-1,-2));activity.setContentView(scroll);
-        if(!setup){
+        if(cancel!=null){Button back=new Button(activity);back.setAllCaps(false);back.setText("Annuler");layout.addView(back);back.setOnClickListener(v->{firstPin=null;cancel.run();});}
+        if(!setup && useBiometric){
             try{
                 if(BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)==BiometricManager.BIOMETRIC_SUCCESS){
                     biometric=new BiometricPrompt(activity,ContextCompat.getMainExecutor(activity),new BiometricPrompt.AuthenticationCallback(){
