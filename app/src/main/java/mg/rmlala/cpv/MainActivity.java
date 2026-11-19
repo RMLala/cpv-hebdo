@@ -109,7 +109,7 @@ public class MainActivity extends androidx.fragment.app.FragmentActivity {
                 .setPositiveButton("Fermer", (d,w)->finish()).setCancelable(false).show();
         }
     }
-    private void showGate(){pinGate.show(()->{setContentView(web);if(!contentLoaded){contentLoaded=true;web.loadUrl("https://"+LOCAL_HOST+"/assets/index.html");}});}
+    private void showGate(){pinGate.show(()->{setContentView(web);if(!contentLoaded){contentLoaded=true;web.loadUrl("https://"+LOCAL_HOST+"/assets/index.html");}else web.evaluateJavascript("typeof cpvResume4==='function'&&cpvResume4()",null);});}
     private boolean authorized(){return pinGate!=null && pinGate.isUnlocked();}
     private boolean navigate(Uri uri) {
         if ("https".equals(uri.getScheme()) && LOCAL_HOST.equals(uri.getHost()) && "/assets/index.html".equals(uri.getPath())) return false;
