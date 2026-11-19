@@ -143,7 +143,7 @@ public class MainActivity extends androidx.fragment.app.FragmentActivity {
         runOnUiThread(() -> { if (!destroyed) web.evaluateJavascript("window."+function+"("+JSONObject.quote(requestId)+","+JSONObject.quote(result.toString())+")",null); });
     }
     private void errorCallback(String function,String requestId,String message){try{callback(function,requestId,new JSONObject().put("error",message));}catch(Exception ignored){}}
-    @Override protected void onResume(){super.onResume();if(!securityEditing && pinGate!=null && pinGate.enabled() && stoppedAt>0 && System.currentTimeMillis()-stoppedAt>=60000){pinGate.lock();showGate();}stoppedAt=0;if(web!=null && authorized())web.evaluateJavascript("typeof scheduleSync20==='function'&&scheduleSync20()",null);}
+    @Override protected void onResume(){super.onResume();if(!securityEditing && pinGate!=null && pinGate.enabled() && stoppedAt>0 && System.currentTimeMillis()-stoppedAt>=60000){pinGate.lock();showGate();}stoppedAt=0;if(web!=null && authorized())web.evaluateJavascript("typeof cpvResume4==='function'&&cpvResume4()",null);}
     @Override protected void onStop(){stoppedAt=System.currentTimeMillis();super.onStop();}
     @Override protected void onDestroy(){destroyed=true;if(recognizer!=null)recognizer.close();io.shutdownNow();if(web!=null){web.removeJavascriptInterface("CpvNative");web.destroy();}super.onDestroy();}
     public class NativeFiles {
@@ -167,7 +167,7 @@ public class MainActivity extends androidx.fragment.app.FragmentActivity {
         @JavascriptInterface public void licenseRequest(String requestId,String endpoint,String path,String body){
             if(!authorized()){errorCallback("cpvLicenseResult3",requestId,"Application verrouillée.");return;}
             io.execute(()->{HttpURLConnection connection=null;try{
-                if(!endpoint.equals("https://appforge-license-api.appforge-licences-mg.workers.dev"))throw new Exception("Service refusé.");
+                if(!endpoint.equals("https://appforge-license-api.lalainaadclick.workers.dev"))throw new Exception("Service refusé.");
                 URL base=new URL(endpoint);
                 if(!base.getProtocol().equals("https")||!base.getHost().matches("[a-z0-9.-]+\\.workers\\.dev")||base.getPort()!=-1||base.getUserInfo()!=null||base.getQuery()!=null||base.getRef()!=null||!(base.getPath().isEmpty()||base.getPath().equals("/")))throw new Exception("Service refusé.");
                 if(!path.matches("/v1/(config|trial|activate|status|cloud/token)")||body==null||body.length()>16000)throw new Exception("Route refusée.");
@@ -277,7 +277,7 @@ public class MainActivity extends androidx.fragment.app.FragmentActivity {
             io.execute(()->{HttpURLConnection connection=null;try{
                 if(resource==null||!resource.matches("[A-Za-z0-9_-]{1,80}")||!(method.equals("GET")||method.equals("PUT"))||body==null||body.getBytes(StandardCharsets.UTF_8).length>450000)throw new Exception();
                 String token=pinGate.cloudToken();
-                connection=(HttpURLConnection)new URL("https://appforge-license-api.appforge-licences-mg.workers.dev/v1/cloud/snapshot?resource="+resource).openConnection();
+                connection=(HttpURLConnection)new URL("https://appforge-license-api.lalainaadclick.workers.dev/v1/cloud/snapshot?resource="+resource).openConnection();
                 connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(15000);connection.setReadTimeout(25000);connection.setRequestMethod(method);connection.setRequestProperty("Content-Type","application/json");connection.setRequestProperty("Authorization","Bearer "+token);
                 if(method.equals("PUT")){connection.setDoOutput(true);try(OutputStream out=connection.getOutputStream()){out.write(body.getBytes(StandardCharsets.UTF_8));}}
                 int status=connection.getResponseCode();InputStream stream=status<400?connection.getInputStream():connection.getErrorStream();ByteArrayOutputStream result=new ByteArrayOutputStream();

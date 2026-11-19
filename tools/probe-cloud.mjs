@@ -1,5 +1,5 @@
 // Observation only. No license/code/account/payment is created or changed.
-const base='https://appforge-license-api.appforge-licences-mg.workers.dev';
+const base='https://appforge-license-api.lalainaadclick.workers.dev';
 async function check(path,options){try{const r=await fetch(base+path,{...options,signal:AbortSignal.timeout(20000)});let body={};try{body=await r.json()}catch{}return{status:r.status,ok:r.ok,service:body.service,protocol:body.protocol}}catch{return{status:null,ok:false,error:'network unavailable'}}}
 const health=await check('/health'),config=await check('/v1/config'),token=await check('/v1/cloud/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({productId:'CPV-HEBDO',installationId:'cpv-public-contract-observation',licenseToken:'invalid-no-credential'})}),snapshot=await check('/v1/cloud/snapshot?resource=cpv-public-contract-observation');
 console.log(JSON.stringify({observedAt:new Date().toISOString(),endpoint:base,health,config,token,snapshot,contractAvailable:health.ok&&config.protocol==='appforge-license-v1'&&[400,403].includes(token.status)&&snapshot.status===401,runtimeBusinessVerified:false,limitations:['No real MVola payment','No production license supplied','No authorized production devices exercised','Observation does not certify functional compliance']},null,2));

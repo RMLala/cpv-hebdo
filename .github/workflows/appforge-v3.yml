@@ -9,6 +9,6 @@ permissions:
   contents: read
 jobs:
   audit:
-    uses: RMLala/android-template/.github/workflows/appforge-v3-reusable.yml@ea5e9bce72817f43ec7b3f6b3e979c02ce46b480
+    uses: RMLala/android-template/.github/workflows/appforge-v3-reusable.yml@697e62dbcddd0b9571fac6b01909b9a6767b4805
     with:
       source_dir: .
