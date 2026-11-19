@@ -1,12 +1,12 @@
 // AppForge license-bound Cloud contract: RMLala/appforg PR #8 + #11, commit 9064b1b.
 // No account, organization, server secret, token in URL, backup or report.
-const ISSUER4='https://appforge-license-api.appforge-licences-mg.workers.dev',PRODUCT4='CPV-HEBDO';
-let session4=null,connectPromise4=null,syncPromise4=null,retry4=2000,poll4=null,lastCloudError4='',cloudScope4='',cloudStopped4=false,licenseBusy4=false,cloudRequests4=0;
+const ISSUER4='https://appforge-license-api.lalainaadclick.workers.dev',PRODUCT4='CPV-HEBDO';
+let licenseServerConfirmed4=false,statusConfirmed4=false,session4=null,connectPromise4=null,syncPromise4=null,retry4=2000,poll4=null,lastCloudError4='',cloudScope4='',cloudStopped4=false,licenseBusy4=false,cloudRequests4=0;
 const nativePending4=new Map();
 function syncMeta4(){return state.cloudSync4||(state.cloudSync4={pending:true,lastSuccess:'',scope:''})}
 const validateBefore4=validateState;
 validateState=function(value){const n=validateBefore4(value),s=value.cloudSync4;n.cloudSync4={pending:s?.pending!==false,lastSuccess:typeof s?.lastSuccess==='string'&&Number.isFinite(Date.parse(s.lastSuccess))?s.lastSuccess:'',scope:typeof s?.scope==='string'?s.scope.slice(0,180):''};return n};
-function cloudConnected4(){return !!session4&&session4.expires>Date.now()&&navigator.onLine!==false&&!cloudStopped4}
+function cloudConnected4(){return statusConfirmed4&&!!session4&&session4.expires>Date.now()&&navigator.onLine!==false&&!cloudStopped4}
 function refreshCloud4(message){
  if(message!==undefined)lastCloudError4=message;
  const el=$('cloudStatus20');if(!el)return;const meta=syncMeta4();
@@ -16,7 +16,7 @@ function refreshCloud4(message){
  if($('cloudConflict20'))$('cloudConflict20').hidden=!cloudConflict20;
  if($('licenseCloudRights4'))$('licenseCloudRights4').textContent='Droits Cloud : '+(cloudConnected4()?'accordés par le serveur.':cloudStopped4?'suspendus ou refusés.':'en attente de vérification serveur.');refreshSupport3();
 }
-function clearCloud4(suspended=false){session4=null;cloudToken20='';cloudStopped4=suspended;window.CpvNative?.clearCloudToken4?.();}
+function clearCloud4(suspended=false){statusConfirmed4=false;session4=null;cloudToken20='';cloudStopped4=suspended;window.CpvNative?.clearCloudToken4?.();}
 async function verifyCloudToken4(access){
  if(access?.enabled===false)throw Object.assign(Error('Cette licence ne donne pas droit au Cloud.'),{status:403,cloudEntitlementDenied:true});
  if(!access||typeof access.token!=='string'||access.token.length>8192)throw Error('Aucun jeton Cloud valide reçu.');
@@ -29,20 +29,20 @@ async function verifyCloudToken4(access){
  if(c.access!==expected||c.scope!==(lic.kind==='trial'?'trial':'license'))throw Error('Les droits Cloud ne correspondent pas à la licence.');
  const expires=Math.min(expiry,lic.exp?Date.parse(lic.exp):Infinity);
  if(window.CpvNative?.storeCloudToken4&&!CpvNative.storeCloudToken4(access.token,expires))throw Error('Stockage sécurisé du jeton indisponible.');
- session4={token:window.CpvNative?.licenseCloudRequest4?null:access.token,expires,scope:PRODUCT4+':'+c.access};cloudToken20='verified-license-session';cloudOrg20=session4.scope;cloudScope4=session4.scope;cloudStopped4=false;
+ licenseServerConfirmed4=true;statusConfirmed4=true;session4={token:window.CpvNative?.licenseCloudRequest4?null:access.token,expires,scope:PRODUCT4+':'+c.access};cloudToken20='verified-license-session';cloudOrg20=session4.scope;cloudScope4=session4.scope;cloudStopped4=false;
  return session4;
 }
 async function connectCloud4(force=false,access=null){
  if(navigator.onLine===false)throw Error('Hors ligne. Reprise automatique au retour du réseau.');
- if(!force&&session4?.expires>Date.now()+60000&&!cloudStopped4)return session4;
+ if(!force&&statusConfirmed4&&session4?.expires>Date.now()+60000&&!cloudStopped4)return session4;
  if(connectPromise4)return connectPromise4;
  connectPromise4=(async()=>{let statusVerified=!!access;try{
   if(!license3?.token)throw Error('Activez une licence éligible au Cloud.');
   if(!license3.key){const config=await licenseAPI3('/v1/config');license3.key=config.publicKey;}
   await claims3(license3.token,license3.key,PRODUCT4,installation3());
-  if(!access){const result=await licenseAPI3('/v1/status',{productId:PRODUCT4,installationId:installation3(),token:license3.token});if(result.active!==true)throw Object.assign(Error('Licence inactive.'),{status:403});statusVerified=true;license3.checkedAt=Date.now();license3.revoked=false;await storeLicense3();access=await licenseAPI3('/v1/cloud/token',{productId:PRODUCT4,installationId:installation3(),licenseToken:license3.token});}
+  if(!access){const result=await licenseAPI3('/v1/status',{productId:PRODUCT4,installationId:installation3(),token:license3.token});if(result.active!==true)throw Object.assign(Error('Licence inactive.'),{status:403});statusVerified=true;licenseServerConfirmed4=true;license3.checkedAt=Date.now();license3.revoked=false;await storeLicense3();access=await licenseAPI3('/v1/cloud/token',{productId:PRODUCT4,installationId:installation3(),licenseToken:license3.token});}
   await verifyCloudToken4(access);lastCloudError4='';retry4=2000;refreshCloud4();return session4;
- }catch(e){clearCloud4(e.status===403);if(e.status===403&&!statusVerified){license3.revoked=true;await storeLicense3();}refreshCloud4(e.status===404?'Le service Cloud lié aux licences n’est pas encore disponible.':e.message);throw e;}finally{connectPromise4=null}})();
+ }catch(e){licenseServerConfirmed4=statusVerified;clearCloud4(e.status===403);if(e.status===403&&!statusVerified){licenseServerConfirmed4=false;license3.revoked=true;license3.token=null;license3.checkedAt=0;await storeLicense3();}refreshCloud4(e.status===404?'Le service Cloud lié aux licences n’est pas encore disponible.':e.message);throw e;}finally{connectPromise4=null}})();
  return connectPromise4;
 }
 window.cpvLicenseCloudResult4=(id,raw)=>{const pending=nativePending4.get(id);if(!pending)return;nativePending4.delete(id);clearTimeout(pending.timer);try{const r=JSON.parse(raw);if(r.error)throw Error(r.error);const body=JSON.parse(r.body||'{}');if(r.status>=400)throw Object.assign(Error('Cloud : '+r.status),{status:r.status});pending.resolve(body)}catch(e){pending.reject(e)}};
@@ -57,7 +57,7 @@ async function cloudRequest4(resource,method='GET',body){
  await connectCloud4();if(!await offlineLicense3()){clearCloud4(true);await refreshLicense3();throw Error('Licence expirée : données locales conservées.');}
  try{return await cloudTransport4(resource,method,body)}catch(e){
   if(e.status===401){clearCloud4();await connectCloud4(true);return cloudTransport4(resource,method,body);}
-  if(e.status===403){clearCloud4(true);try{await licenseAPI3('/v1/status',{productId:PRODUCT4,installationId:installation3(),token:license3.token});}catch(statusError){if(statusError.status===403){license3.revoked=true;await storeLicense3();await refreshLicense3();}}throw Error('Licence, droits Cloud ou appareil refusés. Contactez le support.');}
+  if(e.status===403){clearCloud4(true);try{await licenseAPI3('/v1/status',{productId:PRODUCT4,installationId:installation3(),token:license3.token});}catch(statusError){if(statusError.status===403){licenseServerConfirmed4=false;license3.revoked=true;license3.token=null;license3.checkedAt=0;await storeLicense3();await refreshLicense3();}}throw Error('Licence, droits Cloud ou appareil refusés. Contactez le support.');}
   if(e.status===413)throw Error('Limite de stockage ou de taille Cloud atteinte. Contactez le support. Données locales conservées.');
   if(e.status===429)throw Error('Quota du service atteint. Réessayez plus tard.');throw e;
  }
@@ -111,7 +111,7 @@ syncCloud20=async function(){
 scheduleSync20=function(){if(!state)return;syncMeta4().pending=true;if(!bootComplete3||!license3?.token)return;clearTimeout(syncTimer20);syncTimer20=setTimeout(syncCloud20,1500)};
 async function startCloud4(access=null){
  if(!license3?.token)return refreshCloud4();cloudStopped4=false;
- try{await connectCloud4(true,access);await syncCloud20();}catch{}
+ try{await connectCloud4(true,access);await syncCloud20();}catch{}await refreshLicense3();
  if(!poll4)poll4=setInterval(()=>{if(navigator.onLine!==false&&!cloudStopped4)syncCloud20();},60000);
 }
 function setupCloud4(){
@@ -120,4 +120,12 @@ function setupCloud4(){
  $('cloudRestore20').onclick=async()=>{try{cloudLoaded20=false;await readCloud20();await restoreCloud20(false)}catch(e){refreshCloud4(e.message)}};refreshCloud4();
 }
 window.addEventListener('online',()=>{retry4=2000;cloudStopped4=false;startCloud4()});
-window.addEventListener('offline',()=>refreshCloud4());
+window.addEventListener('offline',()=>{licenseServerConfirmed4=false;statusConfirmed4=false;refreshLicense3();refreshCloud4()});
+
+async function revalidateOnResume4(){
+ licenseServerConfirmed4=false;statusConfirmed4=false;clearCloud4();await refreshLicense3();
+ if(navigator.onLine===false){refreshCloud4('Hors ligne : vérification serveur en attente.');return;}
+ if(license3?.token)await startCloud4();else refreshCloud4();
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')revalidateOnResume4()});
+window.cpvResume4=()=>revalidateOnResume4();

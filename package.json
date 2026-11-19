@@ -1,6 +1,6 @@
 {
   "name": "cpv-hebdo",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "scripts": {
     "test": "node tests/app.test.cjs && node tests/premium.test.cjs && node tests/v3.test.cjs && node --test tests/issuer-contract.test.mjs tests/cloud-client.test.mjs",
