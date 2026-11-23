@@ -128,19 +128,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Build selected signed release API29
+      - name: Build signed release API23 and API29
         env:
           RELEASE_KEYSTORE_FILE: ${{ runner.temp }}/cpv-release.jks
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           RELEASE_VERSION_CODE: ${{ github.run_number }}
-        run: gradle --no-daemon :app:assembleApi29Release -PreleaseVersionCode="$RELEASE_VERSION_CODE"
+        run: gradle --no-daemon :app:assembleApi23Release :app:assembleApi29Release -PreleaseVersionCode="$RELEASE_VERSION_CODE"
       - name: Verify APK signatures, compatibility and version
         run: |
           set -euo pipefail
           tools="$ANDROID_HOME/build-tools/35.0.0"
-          for api in 29; do
+          for api in 23 29; do
             apk="app/build/outputs/apk/api${api}/release/app-api${api}-release.apk"
             "$tools/apksigner" verify "$apk"
             "$tools/aapt" dump badging "$apk" | grep "sdkVersion:'$api'"
@@ -148,8 +148,10 @@ jobs:
           done
       - uses: actions/upload-artifact@v4
         with:
-          name: CPV-Hebdo-2.4-Release-API29
-          path: app/build/outputs/apk/api29/release/*.apk
+          name: CPV-Hebdo-2.4-Release-API23-API29
+          path: |
+            app/build/outputs/apk/api23/release/*.apk
+            app/build/outputs/apk/api29/release/*.apk
           if-no-files-found: error
       - name: Remove ephemeral signing key
         if: always()
