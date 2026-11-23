@@ -1,4 +1,4 @@
-# CPV Rapport Hebdo — Premium 2.1
+# CPV Rapport Hebdo — Premium 2.4
 
 Rapports hebdomadaires Facebook, HTML standalone et Android 6+/10+.
 
@@ -25,11 +25,21 @@ Le générateur assemble un unique HTML avec les ressources OCR épinglées par 
 
 Les quatre noms de secrets existants restent KEYSTORE_BASE64, KEY_ALIAS, KEYSTORE_PASSWORD, KEY_PASSWORD. L’organisation RMLala utilise GitHub Free : les secrets d’organisation nécessitent ici un dépôt public et une politique d’accès appropriée. Si ces secrets sont absents, le job Release échoue explicitement ; il ne produit pas de faux APK signé.
 
-## Synchronisation
+## Synchronisation AppForge V3
 
-Serveur existant : https://appforge-cloud-api.appforge-licences-mg.workers.dev ; routes issues du contrat AppForge Studio : /v1/auth/login, /v1/session, /v1/organizations/{org}/apps/{app}/snapshot. appId racine cpv-hebdo-v1. La connexion et le jeton restent en mémoire ; reconnectez-vous après fermeture complète. L’automatisme s’active dans la session après une première liaison explicite. Une modification concurrente conserve la copie locale et arrête les écritures automatiques.
+Le code courant (`src/license.js` et `src/cloud.js`) utilise le Worker central AppForge V3 :
 
-Le HTML local peut nécessiter une origine autorisée par le Worker (CORS). Android utilise une passerelle HTTPS limitée aux seules routes de ce serveur, sans redirection, sans clé administrateur. La connexion réelle à deux appareils doit être vérifiée avec le compte de l’utilisateur ; aucun identifiant n’est fourni dans ce dépôt.
+- URL fixe : https://appforge-license-api.lalainaadclick.workers.dev
+- Produit déclaré dans le client : `CPV-HEBDO` (son existence et ses droits dans D1 doivent être confirmés par l’éditeur ; la configuration publique ne publie pas la liste des produits).
+- Configuration : `GET /v1/config`.
+- Essai / activation : `POST /v1/trial` et `POST /v1/activate`.
+- Contrôle : `POST /v1/status`.
+- Jeton Cloud lié à la licence et à l’installation : `POST /v1/cloud/token`.
+- Snapshot : `GET/PUT /v1/cloud/snapshot?resource=default`, avec contrôle de révision et gestion explicite des conflits.
+
+Le client ne demande pas de compte Cloud, d’e-mail, de mot de passe ni d’organisation. Les opérations métier restent locales hors connexion ; la synchronisation reprend lorsque le réseau et une preuve de licence valide sont disponibles. Les erreurs de licence ou de Cloud ne doivent jamais supprimer les données locales.
+
+Les anciennes références à `appforge-cloud-api.appforge-licences-mg.workers.dev`, à `/v1/auth/login` et aux routes d’organisation décrivent le protocole historique, plus utilisé par le client V3. Le smoke test central documenté au 22/11/2026 confirme `/health`, `/v1/config` et le refus 401 d’un snapshot sans jeton ; il ne valide pas une activation CPV réelle ni un échange D1 authentifié. Ne pas déclarer la synchronisation CPV de production certifiée sans test avec une licence dédiée et deux appareils.
 
 ## Limites à connaître
 
